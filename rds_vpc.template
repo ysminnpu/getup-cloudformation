@@ -1,0 +1,235 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "AWS RDS com suporte a VPC, informar: DBName, admin DBUsername/Password, AlarmTopic",
+
+  "Parameters" : {
+
+    "VpcId" : {
+      "Type" : "String",
+      "Default" : "vpc-8c4b07e5",
+      "Description" : "Id do VPC"
+    },
+
+    "MyDBSubnetGroup" : {
+      "Type" : "String",
+      "Default" : "mysql",
+      "Description" : "grupo de rede para RDS"
+    },
+
+    "DBName": {
+      "Default": "MyDatabase",
+      "Description" : "The database name",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "64",
+      "AllowedPattern" : "[a-zA-Z][a-zA-Z0-9]*",
+      "ConstraintDescription" : "must begin with a letter and contain only alphanumeric characters."
+    },
+
+    "DBUsername": {
+      "Default": "admin",
+      "NoEcho": "true",
+      "Description" : "The database admin account username",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "16",
+      "AllowedPattern" : "[a-zA-Z][a-zA-Z0-9]*",
+      "ConstraintDescription" : "must begin with a letter and contain only alphanumeric characters."
+    },
+    
+    "DBPassword": {
+      "Default": "admin",
+      "NoEcho": "true",
+      "Description" : "The database admin account password",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "41",
+      "AllowedPattern" : "[a-zA-Z0-9]*",
+      "ConstraintDescription" : "must contain only alphanumeric characters."
+    },
+
+    "DBInstanceClass" : {
+      "Default" : "db.t1.micro",
+      "Description" : "Tamanho da instancia",
+      "Type" : "String",
+      "AllowedValues" : [ "db.t1.micro", "db.m1.small", "db.m1.large", "db.m1.xlarge", "db.m2.xlarge", "db.m2.2xlarge", "db.m2.4xlarge" ],
+      "ConstraintDescription" : "must select a valid database instance type."
+    },
+
+    "DBAllocatedStorage" : {
+      "Default": "5",
+      "Description" : "The size of the database (Gb)",
+      "Type": "Number",
+      "MinValue": "5",
+      "MaxValue": "1024",
+      "ConstraintDescription" : "must be between 5 and 1024Gb."
+    },
+    "AlarmTopic": {
+      "Description": "email para nevio de notificacoes",
+      "Type": "String"
+    }    
+  },
+
+"Mappings" : {
+    "InstanceTypeMap" : {
+      "db.t1.micro" : {
+        "CPULimit" : "60",
+        "FreeStorageSpaceLimit" : "1024",
+        "ReadIOPSLimit" : "100",
+        "WriteIOPSLimit" : "100"
+      },
+      "db.m1.small" : {
+        "CPULimit" : "60",
+        "FreeStorageSpaceLimit" : "1024",
+        "ReadIOPSLimit" : "100",
+        "WriteIOPSLimit" : "100"
+      },
+      "db.m1.large" : {
+        "CPULimit" : "60",
+        "FreeStorageSpaceLimit" : "1024",
+        "ReadIOPSLimit" : "100",
+        "WriteIOPSLimit" : "100"
+      },
+      "db.m1.xlarge" : {
+        "CPULimit" : "60",
+        "FreeStorageSpaceLimit" : "1024",
+        "ReadIOPSLimit" : "100",
+        "WriteIOPSLimit" : "100"
+      },
+      "db.m2.xlarge" : {
+        "CPULimit" : "60",
+        "FreeStorageSpaceLimit" : "1024",
+        "ReadIOPSLimit" : "100",
+        "WriteIOPSLimit" : "100"
+      },
+      "db.m2.2xlarge" : {
+        "CPULimit" : "60",
+        "FreeStorageSpaceLimit" : "1024",
+        "ReadIOPSLimit" : "100",
+        "WriteIOPSLimit" : "100"
+      },
+      "db.m2.4xlarge" : {
+        "CPULimit" : "60",
+        "FreeStorageSpaceLimit" : "1024",
+        "ReadIOPSLimit" : "100",
+        "WriteIOPSLimit" : "100"
+      }
+    }
+  },  
+
+  "Resources" : {
+
+    "MyDBSecurityGroup" : {
+      "Type" : "AWS::RDS::DBSecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "Security group for RDS DB Instance",
+        "EC2VpcId" : { "Ref" : "VpcId" },
+        "DBSecurityGroupIngress": [
+           { "EC2SecurityGroupId": "sg-e7130f8b" },
+           { "EC2SecurityGroupId": "sg-fc130f90" }
+        ]
+      }
+    },  
+
+    "MyDB" : {
+      "Type" : "AWS::RDS::DBInstance",
+      "Properties" : {
+        "DBName" : { "Ref" : "DBName" },
+        "AllocatedStorage" : { "Ref" : "DBAllocatedStorage" },
+        "DBInstanceClass" : { "Ref" : "DBInstanceClass" },
+        "Engine" : "MySQL",
+        "EngineVersion" : "5.5",
+        "MasterUsername" : { "Ref" : "DBUsername" } ,
+        "MasterUserPassword" : { "Ref" : "DBPassword" },
+        "DBSubnetGroupName" : { "Ref" : "MyDBSubnetGroup" },
+        "MultiAZ" : "true",
+        "DBSecurityGroups" : [ { "Ref" : "MyDBSecurityGroup" } ]
+      }
+    },
+    "CPUAlarmHigh": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmDescription": { "Fn::Join" : [ "", ["Alarm if ", { "Ref" : "DBName" }, " CPU > ", { "Fn::FindInMap" : [ "InstanceTypeMap", { "Ref" : "DBInstanceClass" }, "CPULimit" ]}, "% for 5 minutes" ]]},
+        "Namespace": "AWS/RDS",
+        "MetricName": "CPUUtilization",
+        "Statistic": "Average",
+        "Period": "60",
+        "Threshold": { "Fn::FindInMap" : [ "InstanceTypeMap", { "Ref" : "DBInstanceClass" }, "CPULimit" ]},
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "5",
+        "AlarmActions": [ { "Ref": "AlarmTopic" } ],
+        "Dimensions": [{
+            "Name": "DBInstanceIdentifier",
+            "Value": { "Ref": "MyDB" }
+        }]
+      }
+    }, 
+    "FreeStorageSpace": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmDescription": { "Fn::Join" : [ "", ["Alarm if ", { "Ref" : "DBName" }, " storage space <= ", { "Fn::FindInMap" : [ "InstanceTypeMap", { "Ref" : "DBInstanceClass" }, "FreeStorageSpaceLimit" ]}, " for 5 minutes" ]]},
+        "Namespace": "AWS/RDS",
+        "MetricName": "FreeStorageSpace",
+        "Statistic": "Average",
+        "Period": "60",
+        "Threshold": { "Fn::FindInMap" : [ "InstanceTypeMap", { "Ref" : "DBInstanceClass" }, "FreeStorageSpaceLimit" ]},
+        "ComparisonOperator": "LessThanOrEqualToThreshold",
+        "EvaluationPeriods": "5",
+        "AlarmActions": [ { "Ref": "AlarmTopic" } ],
+        "Dimensions": [{
+            "Name": "DBInstanceIdentifier",
+            "Value": { "Ref": "MyDB" }
+        }]
+      }
+    }, 
+    "ReadIOPSHigh": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmDescription": { "Fn::Join" : [ "", ["Alarm if ", { "Ref" : "DBName" }, " WriteIOPs > ", { "Fn::FindInMap" : [ "InstanceTypeMap", { "Ref" : "DBInstanceClass" }, "ReadIOPSLimit" ]}, " for 5 minutes" ]]},
+        "Namespace": "AWS/RDS",
+        "MetricName": "ReadIOPS",
+        "Statistic": "Average",
+        "Period": "60",
+        "Threshold": { "Fn::FindInMap" : [ "InstanceTypeMap", { "Ref" : "DBInstanceClass" }, "ReadIOPSLimit" ]},
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "5",
+        "AlarmActions": [ { "Ref": "AlarmTopic" } ],
+        "Dimensions": [{
+            "Name": "DBInstanceIdentifier",
+            "Value": { "Ref": "MyDB" }
+        }]
+      }
+    },
+    "WriteIOPSHigh": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmDescription": { "Fn::Join" : [ "", ["Alarm if ", { "Ref" : "DBName" }, " WriteIOPs > ", { "Fn::FindInMap" : [ "InstanceTypeMap", { "Ref" : "DBInstanceClass" }, "WriteIOPSLimit" ]}, " for 5 minutes" ]]},
+        "Namespace": "AWS/RDS",
+        "MetricName": "WriteIOPS",
+        "Statistic": "Average",
+        "Period": "60",
+        "Threshold": { "Fn::FindInMap" : [ "InstanceTypeMap", { "Ref" : "DBInstanceClass" }, "WriteIOPSLimit" ]},
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": "5",
+        "AlarmActions": [ { "Ref": "AlarmTopic" } ],
+        "Dimensions": [{
+            "Name": "DBInstanceIdentifier",
+            "Value": { "Ref": "MyDB" }
+        }]
+      }
+    }
+  },
+
+  "Outputs" : {
+    "ConnectionString": {
+      "Description" : "JDBC connection string for database",
+      "Value" : { "Fn::Join": [ "", [ "mysql://",
+                                      { "Fn::GetAtt": [ "MyDB", "Endpoint.Address" ] },
+                                      ":",
+                                      { "Fn::GetAtt": [ "MyDB", "Endpoint.Port" ] },
+                                      "/",
+                                      { "Ref": "DBName" }]]}
+    }
+  }
+}

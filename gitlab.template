@@ -1,0 +1,282 @@
+  {
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "gitlab, ubuntu 12.04 informar: SubnetId, GitoliteHost, GitoliteHost, MysqlUser,  Mysqlpasswd, MysqlDB, RedisHost ",
+
+  "Parameters" : {
+
+    "KeyName" : {
+      "Description" : "Chave SSH publica para admin",
+      "Default" : "getup",
+      "Type" : "String"
+    },
+    
+    "PuppetHostname": {
+      "Description" : "PuppetMaster hostname",
+      "Default" : "puppetmaster.ops.getupcloud.com",
+      "Type": "String"
+    },
+
+    "VpcId" : {
+      "Type" : "String",
+      "Default" : "vpc-8c4b07e5",
+      "Description" : "Id do VPC"
+    },
+
+    "SubnetId" : {
+      "Type" : "String",
+      "Description" : "Id da subnet. Obs: a zona é selecionada automaticamente"
+    },
+
+    "AmiId" : {
+      "Type" : "String",
+      "Default" : "ami-8e109ebe",
+      "Description" : "AMI utilizado para a instancia (Ubuntu 10.04)"
+      
+    },
+    
+    "InstanceType" : {
+      "Description" : "Tamanho da instancia",
+      "Type" : "String",
+      "Default" : "t1.micro",
+      "AllowedValues" : [ "t1.micro","m1.small","m1.medium","m1.large","m1.xlarge","m2.xlarge","m2.2xlarge","m2.4xlarge","c1.medium","c1.xlarge","cc1.4xlarge","cc2.8xlarge","cg1.4xlarge"],
+      "ConstraintDescription" : "must be a valid EC2 instance type."
+    },
+
+    "SecurityGroupId": {
+      "Type" : "String",
+      "Default" : "sg-fc130f90",
+      "Description" : "SecurityGroup"
+    },
+
+    "MysqlHost": {
+      "Type" : "String",
+      "Description" : "Mysql hostname"
+    },
+
+    "MysqlUser": {
+      "Type" : "String",
+      "Description" : "Mysql usuario"
+    },
+
+    "Mysqlpasswd": {
+     "Type" : "String",
+     "NoEcho": "true",
+     "Description" : "Mysql senha"
+    },
+
+    "MysqlDB": {
+      "Type" : "String",
+      "Description" : "Mysql BD"
+    },
+
+    "AdminUser" : {
+      "Type" : "String",
+      "Description" : "Gitlab admin username"
+    },
+    "AdminPasswd" : {
+      "Type" : "String",
+      "NoEcho" : "true",
+      "Description" : "Gitlab admin password"
+    },
+    "GitlabHostname" : {
+      "Type" : "String",
+      "Description" : "Gitlab server hostname"
+    }
+  },
+  "Resources": {
+
+    "CFNInitUser" : {
+      "Type" : "AWS::IAM::User",
+      "Properties" : {
+        "Policies": [{
+          "PolicyName": "AccessForCFNInit",
+          "PolicyDocument" : {
+            "Statement": [{
+              "Effect"   : "Allow",
+              "Action"   : "cloudformation:DescribeStackResource",
+              "Resource" : "*"
+            }]
+          }
+        }]
+      }
+    },
+    
+    "CFNKeys" : {
+      "Type" : "AWS::IAM::AccessKey",
+      "Properties" : {
+        "UserName" : { "Ref": "CFNInitUser" }
+      }
+    },
+
+    "OpsDNSRecord": {
+      "Type" : "AWS::Route53::RecordSet",
+      "Properties" : {
+        "HostedZoneName" : "ops.getupcloud.com.",
+        "Comment" : "A record created by cloudformation",
+        "Name" : { "Fn::Join" : [ "", [{"Ref" : "AWS::StackName"}, ".ops.getupcloud.com"]]},
+        "Type" : "A",
+        "TTL" : "300",
+        "ResourceRecords" : [ {
+          "Fn::GetAtt" : [ "Instance","PrivateIp" ] 
+        }]
+      } 
+    },
+    
+    "DNSRecord": {
+      "Type" : "AWS::Route53::RecordSet",
+      "Properties" : {
+        "HostedZoneName" : "getupcloud.com.",
+        "Comment" : "A record created by cloudformation",
+        "Name" : { "Fn::Join" : [ "", [{"Ref" : "GitlabHostname"}, ".getupcloud.com"]]},
+        "Type" : "A",
+        "TTL" : "300",
+        "ResourceRecords" : [
+          { "Ref" : "IPAddress" }
+        ]
+      } 
+    }, 
+    
+    "IPAddress" : {
+      "Type" : "AWS::EC2::EIP",
+      "Properties" : {
+        "Domain" : "vpc",
+        "InstanceId" : { "Ref" : "Instance" }
+      }
+    },
+  
+    "Instance": {  
+      "Type": "AWS::EC2::Instance",
+      "Metadata" : {
+        "AWS::CloudFormation::Init" : {
+          "config" : {
+            "packages" : {
+              "apt" : {
+                "puppet"     : [],
+                "rubygems"   : []
+              },
+              "rubygems" : {
+                "json"       : []
+              }
+            },
+            "files" : {
+              "/etc/puppet/puppet.conf" : {
+                "content" : { "Fn::Join" : ["", [
+                  "[main]\n",
+                  "   logdir=/var/log/puppet\n",
+                  "   rundir=/var/run/puppet\n",
+                  "   ssldir=$vardir/ssl\n",
+                  "   pluginsync=true\n",
+                  "[agent]\n",
+                  "   classfile=$vardir/classes.txt\n",
+                  "   localconfig=$vardir/localconfig\n",
+                  "   server=",{ "Ref" : "PuppetHostname" },"\n"
+                ]] },
+                "mode" : "000644",
+                "owner" : "root",
+                "group" : "root"
+              }
+            },
+            "services" : {
+              "sysvinit" : {  
+                "puppet" : {
+                  "enabled" : "true",
+                  "ensureRunning" : "true"                
+                }
+              }
+            }
+          }
+        },
+        "Puppet" : {
+          "roles"        : [ "gitlab" ],
+          "mysqlhost"    : [ {"Ref" : "MysqlHost"}],
+          "mysqluser"    : [ {"Ref" : "MysqlUser"}],
+          "mysqlpasswd"  : [ {"Ref" : "Mysqlpasswd"}],
+          "mysqldb"      : [ {"Ref" : "MysqlDB"}],
+          "adminpasswd"  : [ {"Ref" : "AdminPasswd"}],
+          "adminuser"    : [ {"Ref" : "AdminUser"}],
+          "gitlab_hostname"  : [ {"Ref" : "GitlabHostname"}]
+        }
+      },
+      "Properties": {
+        "ImageId" : { "Ref" : "AmiId" },
+        "SecurityGroupIds" : [{ "Ref" : "SecurityGroupId" }],
+        "SubnetId" : { "Ref" : "SubnetId" },
+        "KeyName" : { "Ref" : "KeyName" },
+        "InstanceType": { "Ref": "InstanceType" },
+        "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
+          "#!/bin/bash\n",
+          "apt-get update\n",
+          "apt-get -y install python-setuptools\n",
+          "easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
+          "while [ ! -e /dev/xvdo ]; do echo Waiting for EBS volume to attach; sleep 5; done\n",
+
+          "/usr/local/bin/cfn-init --region ", { "Ref" : "AWS::Region" },
+          "    -s ", { "Ref" : "AWS::StackName" }, " -r Instance ",
+          "    --access-key ", { "Ref" : "CFNKeys" },
+          "    --secret-key ", { "Fn::GetAtt" : ["CFNKeys", "SecretAccessKey"]}, "\n",
+
+          "sed -i \"s/no/yes/\" /etc/default/puppet\n",
+          "service puppet start\n",
+          "/usr/local/bin/cfn-signal -e $? '", { "Ref" : "ApplicationWaitHandle" }, "'\n"
+        ]]}}
+      }
+    },
+    "MountPoint" : {
+      "Type" : "AWS::EC2::VolumeAttachment",
+      "Properties" : {
+        "InstanceId" : { "Ref" : "Instance" },
+        "VolumeId"  : { "Ref" : "NewVolume" },
+        "Device" : "/dev/sdo"
+      }
+    },
+
+    "NewVolume" : {
+      "Type" : "AWS::EC2::Volume",
+      "Properties" : {
+        "Size" : "5",
+        "AvailabilityZone" : { "Fn::GetAtt" : [ "Instance", "AvailabilityZone" ]}
+      }
+    },      
+    
+    "ApplicationWaitHandle" : {
+      "Type" : "AWS::CloudFormation::WaitConditionHandle"
+    },
+
+    "ApplicationWaitCondition" : {
+      "Type" : "AWS::CloudFormation::WaitCondition",
+      "DependsOn"  : "Instance",
+      "Properties" : {
+        "Handle"   : { "Ref" : "ApplicationWaitHandle" },
+        "Timeout"  : "600"
+      }
+    }
+  },
+
+  "Outputs" : {
+    "InstanceId" : {
+      "Value" : { "Ref" : "Instance" },
+      "Description" : "Instance Id of newly created instance"
+    },
+
+    "PublicDNS" : {
+      "Value" : {"Ref" : "DNSRecord" },
+      "Description" : "Instance dns name"
+    },
+
+    "OPSDNS" : {
+      "Value" : {"Ref" : "OpsDNSRecord" },
+      "Description" : "Instance internal dns name"
+    },
+
+    "Subnet" : {
+      "Value" : { "Ref" : "SubnetId" },
+      "Description" : "Subnet of instance"
+    },
+
+    "SecurityGroupId" : {
+      "Value" : { "Ref" : "SecurityGroupId" },
+      "Description" : "Security Group of instance"
+    }
+  }
+}
