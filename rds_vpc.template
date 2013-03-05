@@ -16,6 +16,11 @@
       "Default" : "mysql",
       "Description" : "grupo de rede para RDS"
     },
+    "MyDBParamGroup" : {
+      "Type" : "String",
+      "Default" : "getup",
+      "Description" : "group params RDS"
+    },
 
     "DBName": {
       "Default": "MyDatabase",
@@ -127,6 +132,7 @@
         "EC2VpcId" : { "Ref" : "VpcId" },
         "DBSecurityGroupIngress": [
            { "EC2SecurityGroupId": "sg-e7130f8b" },
+           { "EC2SecurityGroupId": "sg-af9884c3" },
            { "EC2SecurityGroupId": "sg-fc130f90" }
         ]
       }
@@ -143,6 +149,7 @@
         "MasterUsername" : { "Ref" : "DBUsername" } ,
         "MasterUserPassword" : { "Ref" : "DBPassword" },
         "DBSubnetGroupName" : { "Ref" : "MyDBSubnetGroup" },
+        "DBParameterGroupName" : { "Ref" : "MyDBParamGroup"},
         "MultiAZ" : "true",
         "DBSecurityGroups" : [ { "Ref" : "MyDBSecurityGroup" } ]
       }
@@ -223,7 +230,7 @@
 
   "Outputs" : {
     "ConnectionString": {
-      "Description" : "JDBC connection string for database",
+      "Description" : "Connection string for database",
       "Value" : { "Fn::Join": [ "", [ "mysql://",
                                       { "Fn::GetAtt": [ "MyDB", "Endpoint.Address" ] },
                                       ":",

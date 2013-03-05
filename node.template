@@ -23,18 +23,25 @@
       "Description" : "Id do VPC"
     },
 
-    "SubnetId" : {
+    "PublicNetId" : {
       "Type" : "String",
-      "Description" : "Id da subnet. Obs: a zona é selecionada automaticamente"
+      "AllowedValues" : [ "1","2","3"],
+      "ConstraintDescription" : "must be values between 1 and 3",
+      "Description" : "Indice da rede [ 1-3 ]"
     },
 
     "AmiId" : {
       "Type" : "String",
       "Default" : "ami-eeee64de",
       "Description" : "AMI utilizado para a instancia"
-      
     },
-    
+    "NodeProfile" : {
+      "Type" : "String",
+      "AllowedValues": [ "production", "development" ],
+      "Description" : "Profile utilizado para o no, production | development",
+      "ConstraintDescription" : "Must be production or development"
+    },
+
     "InstanceType" : {
       "Description" : "Tamanho da instancia",
       "Type" : "String",
@@ -49,6 +56,11 @@
       "Description" : "SecurityGroup"
     }
 
+  },
+  "Mappings" : {
+    "NetworksMap" : {
+      "public" :  { "1" : "subnet-974b07fe", "2" : "subnet-60440809", "3" : "subnet-6544080c" }
+    }
   },
   "Resources": {
 
@@ -119,7 +131,7 @@
           "config" : {
             "packages" : {
               "yum" : {
-                "puppet"     : [ "2.7.20" ],
+                "puppet"     : [],
                 "ruby-devel" : [],
                 "gcc"        : [],
                 "make"       : [],
@@ -165,20 +177,22 @@
         },
         "Puppet" : {
           "roles"    : [ "node" ],
+          "node_profile" : [ { "Ref" : "NodeProfile"} ],
           "hostname" : [ { "Ref" : "AWS::StackName"}]
         }
       },
       "Properties": {
         "ImageId" : { "Ref" : "AmiId" },
         "SecurityGroupIds" : [{ "Ref" : "SecurityGroupId" }],
-        "SubnetId" : { "Ref" : "SubnetId" },
+        "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "public", { "Ref" : "PublicNetId" } ] },
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType": { "Ref": "InstanceType" },
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
+          "yum install -y http://epel.gtdinternet.com/6/i386/epel-release-6-8.noarch.rpm\n",
           "while [ ! -e /dev/xvdo ]; do echo Waiting for EBS volume to attach; sleep 5; done\n",
-          "yum install -y http://yum.puppetlabs.com/el/6/products/i386/puppetlabs-release-6-6.noarch.rpm\n",
+          "/bin/hostname ", { "Ref" : "AWS::StackName" }, "\n",
 
           "cfn-init --region ", { "Ref" : "AWS::Region" },
           "    -s ", { "Ref" : "AWS::StackName" }, " -r Instance ",
@@ -212,11 +226,6 @@
     "OPSDNS" : {
       "Value" : {"Ref" : "OpsDNSRecord" },
       "Description" : "Instance internal dns name"
-    },
-
-    "Subnet" : {
-      "Value" : { "Ref" : "SubnetId" },
-      "Description" : "Subnet of instance"
     },
 
     "SecurityGroupId" : {

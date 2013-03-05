@@ -23,26 +23,6 @@
       "Description" : "Id do VPC"
     },
 
-    "SubnetId1" : {
-      "Type" : "String",
-      "Description" : "Id da subnet para ss1. Obs: a zona é selecionada automaticamente"
-    },
-    
-    "SubnetId2" : {
-      "Type" : "String",
-      "Description" : "Id da subnet para ss2. Obs: a zona é selecionada automaticamente"
-    },
-    
-    "SubnetId3" : {
-      "Type" : "String",
-      "Description" : "Id da subnet para ss3. Obs: a zona é selecionada automaticamente"
-    },
-    "SSOpenshiftPasswd" : {
-      "Type" : "String",
-      "NoEcho" : "True",
-      "Description" : "Senha do banco openshift_broker_dev"
-    },
-
     "AmiId" : {
       "Type" : "String",
       "Default" : "ami-2a31bf1a",
@@ -67,8 +47,8 @@
   },
 
 "Mappings" : {
-    "RegionMap" : {
-      "us-west-2"  : { "AMI" : "ami-2a31bf1a", "AZa" : "us-west-2a" }
+    "NetworksMap" : {
+      "private"  : { "privid1" : "subnet-7444081d", "privid2" : "subnet-41440828", "privid3" : "subnet-59440830" }
     }
   },
   "Resources": {
@@ -137,13 +117,6 @@
         }]
       } 
     },
-    "NewVolume" : {
-      "Type" : "AWS::EC2::Volume",
-      "Properties" : {
-        "Size" : "10",
-        "AvailabilityZone" : { "Fn::FindInMap" : [ "RegionMap", { "Ref" : "AWS::Region" }, "AZa" ]}
-      }
-    }, 
     "Instance1": {  
       "Type": "AWS::EC2::Instance",
       "Metadata" : {
@@ -198,20 +171,20 @@
         "Puppet" : {
           "roles"    : "ss",
           "membernumber" : "1",
-          "ss_openshift_passwd" : { "Ref" : "SSOpenshiftPasswd"}
+          "stack_name"          : {"Ref" : "AWS::StackName"}
+          
         }
       },
       "Properties": {
         "ImageId" : { "Ref" : "AmiId" },
         "SecurityGroupIds" : [{ "Ref" : "SecurityGroupId" }],
-        "SubnetId" : { "Ref" : "SubnetId1" },
+        "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "private", "privid1" ] },
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType": { "Ref": "InstanceType" },
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "yum update -y aws-cfn-bootstrap\n",
-          "while [ ! -e /dev/sdo ]; do echo Waiting for EBS volume to attach; sleep 5; done\n",
-          "/bin/hostname ss1\n",
+          "/bin/hostname ", { "Ref": "AWS::StackName"}, "1\n",
 
           "/opt/aws/bin/cfn-init --region ", { "Ref" : "AWS::Region" },
           "    -s ", { "Ref" : "AWS::StackName" }, " -r Instance1 ",
@@ -219,24 +192,10 @@
           "    --secret-key ", { "Fn::GetAtt" : ["CFNKeys", "SecretAccessKey"]}, "\n",
           "/opt/aws/bin/cfn-signal -e $? '", { "Ref" : "ApplicationWaitHandle" }, "'\n"
         ]]}}
-      }
+      },
+    "DependsOn" : "Instance3"
     },
-    "MountPoint" : {
-      "Type" : "AWS::EC2::VolumeAttachment",
-      "Properties" : {
-        "InstanceId" : { "Ref" : "Instance1" },
-        "VolumeId"  : { "Ref" : "NewVolume" },
-        "Device" : "/dev/sdo"
-      }
-    },
-
-    "NewVolume" : {
-      "Type" : "AWS::EC2::Volume",
-      "Properties" : {
-        "Size" : "5",
-        "AvailabilityZone" : { "Fn::GetAtt" : [ "Instance1", "AvailabilityZone" ]}
-      }
-    },    
+        
     "Instance2": {  
       "Type": "AWS::EC2::Instance",
       "Metadata" : {
@@ -291,19 +250,20 @@
         "Puppet" : {
           "roles"    : "ss",
           "membernumber" : "2",
-          "ss_openshift_passwd" : { "Ref" : "SSOpenshiftPasswd"}
+          "stack_name"          : {"Ref" : "AWS::StackName"}
         }
       },
       "Properties": {
         "ImageId" : { "Ref" : "AmiId" },
         "SecurityGroupIds" : [{ "Ref" : "SecurityGroupId" }],
-        "SubnetId" : { "Ref" : "SubnetId2" },
+        "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "private", "privid2" ] },
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType": { "Ref": "InstanceType" },
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "yum update -y aws-cfn-bootstrap\n",
-          "/bin/hostname ss2\n",
+          "while [ ! -e /dev/sdo ]; do echo Waiting for EBS volume to attach; sleep 5; done\n",
+          "/bin/hostname ", { "Ref": "AWS::StackName"}, "2\n",
 
           "/opt/aws/bin/cfn-init --region ", { "Ref" : "AWS::Region" },
           "    -s ", { "Ref" : "AWS::StackName" }, " -r Instance2 ",
@@ -313,6 +273,25 @@
         ]]}}
       }
     },
+
+    "MountPoint" : {
+      "Type" : "AWS::EC2::VolumeAttachment",
+      "Properties" : {
+        "InstanceId" : { "Ref" : "Instance2" },
+        "VolumeId"  : { "Ref" : "NewVolume" },
+        "Device" : "/dev/sdo"
+      }
+    },
+
+    "NewVolume" : {
+      "Type" : "AWS::EC2::Volume",
+      "Properties" : {
+        "Size" : "5",
+        "AvailabilityZone" : { "Fn::GetAtt" : [ "Instance2", "AvailabilityZone" ]}
+      }
+    },
+
+
     "Instance3": {  
       "Type": "AWS::EC2::Instance",
       "Metadata" : {
@@ -367,19 +346,19 @@
         "Puppet" : {
           "roles"    : "ss",
           "membernumber" : "3" ,
-          "ss_openshift_passwd" : { "Ref" : "SSOpenshiftPasswd"}
+          "stack_name"          : {"Ref" : "AWS::StackName"}
         }
       },
       "Properties": {
         "ImageId" : { "Ref" : "AmiId" },
         "SecurityGroupIds" : [{ "Ref" : "SecurityGroupId" }],
-        "SubnetId" : { "Ref" : "SubnetId3" },
+        "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "private", "privid3" ] },
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType": { "Ref": "InstanceType" },
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "yum update -y aws-cfn-bootstrap\n",
-          "/bin/hostname ss3\n",
+          "/bin/hostname ", { "Ref": "AWS::StackName"}, "3\n",
 
           "/opt/aws/bin/cfn-init --region ", { "Ref" : "AWS::Region" },
           "    -s ", { "Ref" : "AWS::StackName" }, " -r Instance3 ",
@@ -387,7 +366,8 @@
           "    --secret-key ", { "Fn::GetAtt" : ["CFNKeys", "SecretAccessKey"]}, "\n",
           "/opt/aws/bin/cfn-signal -e $? '", { "Ref" : "ApplicationWaitHandle" }, "'\n"
         ]]}}
-      }
+      },
+    "DependsOn" : "Instance2"
     },
     "ApplicationWaitHandle" : {
       "Type" : "AWS::CloudFormation::WaitConditionHandle"

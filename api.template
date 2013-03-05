@@ -10,7 +10,7 @@
       "Default" : "getup",
       "Type" : "String"
     },
-    
+
     "PuppetHostname": {
       "Description" : "PuppetMaster hostname",
       "Default" : "puppetmaster.ops.getupcloud.com",
@@ -23,39 +23,18 @@
       "Description" : "Id do VPC"
     },
 
-    "SubnetId" : {
-      "Type" : "String",
-      "Description" : "Id da subnet. Obs: a zona é selecionada automaticamente"
-    },
-
-    "MysqlHost": {
-      "Type" : "String",
-      "Description" : "Mysql hostname"
-    },
-
-    "MysqlUser": {
-      "Type" : "String",
-      "Description" : "Mysql usuario"
-    },
-
-    "Mysqlpasswd": {
-     "Type" : "String",
-     "NoEcho": "true",
-     "Description" : "Mysql senha"
-    },
-
-    "MysqlDB": {
-      "Type" : "String",
-      "Description" : "Mysql BD"
-    },
-
     "AmiId" : {
       "Type" : "String",
       "Default" : "ami-2a31bf1a",
       "Description" : "AMI utilizado para a instancia"
-      
     },
-    
+
+    "PublicNetId" : {
+      "Type" : "String",
+      "AllowedValues" : [ "1","2","3"],
+      "ConstraintDescription" : "must be values between 1 and 3",
+      "Description" : "Indice da rede [ 1-3 ]"
+    },
     "InstanceType" : {
       "Description" : "Tamanho da instancia",
       "Type" : "String",
@@ -70,6 +49,11 @@
       "Description" : "SecurityGroup"
     }
 
+  },
+  "Mappings" : {
+    "NetworksMap" : {
+      "public" :  { "1" : "subnet-974b07fe", "2" : "subnet-60440809", "3" : "subnet-6544080c" }
+    }
   },
   "Resources": {
 
@@ -110,7 +94,7 @@
       } 
     },
     
-    "DNSRecord": {
+    "ApiDNSRecord": {
       "Type" : "AWS::Route53::RecordSet",
       "Properties" : {
         "HostedZoneName" : "getupcloud.com.",
@@ -123,6 +107,19 @@
         ]
       } 
     }, 
+  "BrokerDNSRecord": {
+      "Type" : "AWS::Route53::RecordSet",
+      "Properties" : {
+        "HostedZoneName" : "getupcloud.com.",
+        "Comment" : "A record created by cloudformation",
+        "Name" : "broker.getupcloud.com",
+        "Type" : "CNAME",
+        "TTL" : "300",
+        "ResourceRecords" : [
+          { "Ref" : "ApiDNSRecord" }
+        ]
+      } 
+    },
     
     "IPAddress" : {
       "Type" : "AWS::EC2::EIP",
@@ -184,22 +181,19 @@
           }
         },
         "Puppet" : {
-          "roles"    : [ "api" ],
-          "mysqlhost"    : [ {"Ref" : "MysqlHost"}],
-          "mysqluser"    : [ {"Ref" : "MysqlUser"}],
-          "mysqlpasswd"  : [ {"Ref" : "Mysqlpasswd"}],
-          "mysqldb"      : [ {"Ref" : "MysqlDB"}]
+          "roles"    : [ "api" ]
         }
       },
       "Properties": {
         "ImageId" : { "Ref" : "AmiId" },
         "SecurityGroupIds" : [{ "Ref" : "SecurityGroupId" }],
-        "SubnetId" : { "Ref" : "SubnetId" },
+        "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "public", { "Ref" : "PublicNetId" } ] },
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType": { "Ref": "InstanceType" },
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "yum update -y aws-cfn-bootstrap\n",
+          "/bin/hostname ", { "Ref" : "AWS::StackName" }, "\n",
 
           "/opt/aws/bin/cfn-init --region ", { "Ref" : "AWS::Region" },
           "    -s ", { "Ref" : "AWS::StackName" }, " -r Instance ",
@@ -231,18 +225,13 @@
     },
 
     "PublicDNS" : {
-      "Value" : {"Ref" : "DNSRecord" },
+      "Value" : {"Ref" : "ApiDNSRecord" },
       "Description" : "Instance dns name"
     },
 
     "OPSDNS" : {
       "Value" : {"Ref" : "OpsDNSRecord" },
       "Description" : "Instance internal dns name"
-    },
-
-    "Subnet" : {
-      "Value" : { "Ref" : "SubnetId" },
-      "Description" : "Subnet of instance"
     },
 
     "SecurityGroupId" : {
