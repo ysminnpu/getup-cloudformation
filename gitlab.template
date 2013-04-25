@@ -77,7 +77,15 @@
         "UserName" : { "Ref": "CFNInitUser" }
       }
     },
-
+    "InstanceProfile": {
+        "Type": "AWS::IAM::InstanceProfile",
+         "Properties": {
+            "Path": "/",
+            "Roles": [
+                 "cloudwatch"
+            ]
+        }
+    },
     "OpsDNSRecord": {
       "Type" : "AWS::Route53::RecordSet",
       "Properties" : {
@@ -167,6 +175,8 @@
         "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "public", { "Ref" : "PublicNetId" } ] },
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType": { "Ref": "InstanceType" },
+        "Monitoring" : "true",
+         "IamInstanceProfile" : { "Ref": "InstanceProfile" },
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "apt-get update\n",

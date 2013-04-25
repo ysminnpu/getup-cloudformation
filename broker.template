@@ -22,16 +22,15 @@
       "Default" : "vpc-8c4b07e5",
       "Description" : "Id do VPC"
     },
-    "PrivateNetId" : {
+    "PublicNetId" : {
       "Type" : "String",
       "AllowedValues" : [ "1","2","3"],
       "ConstraintDescription" : "must be values between 1 and 3",
       "Description" : "Indice da rede [ 1-3 ]"
     },
-
     "AmiId" : {
       "Type" : "String",
-      "Default" : "ami-eeee64de",
+      "Default" : "ami-e672e7d6",
       "Description" : "AMI utilizado para a instancia"
     },
     
@@ -50,9 +49,9 @@
     }
 
   },
-"Mappings" : {
+  "Mappings" : {
     "NetworksMap" : {
-      "private"  : { "1" : "subnet-7444081d", "2" : "subnet-41440828", "3" : "subnet-59440830" }
+      "public" :  { "1" : "subnet-974b07fe", "2" : "subnet-60440809", "3" : "subnet-6544080c" }
     }
   },
   "Resources": {
@@ -79,7 +78,15 @@
         "UserName" : { "Ref": "CFNInitUser" }
       }
     },
-
+        "InstanceProfile": {
+        "Type": "AWS::IAM::InstanceProfile",
+         "Properties": {
+            "Path": "/",
+            "Roles": [
+                 "cloudwatch"
+            ]
+        }
+    },
     "OpsDNSRecord": {
       "Type" : "AWS::Route53::RecordSet",
       "Properties" : {
@@ -92,6 +99,27 @@
           "Fn::GetAtt" : [ "Instance","PrivateIp" ] 
         }]
       } 
+    },
+
+    "DNSRecord": {
+      "Type" : "AWS::Route53::RecordSet",
+      "Properties" : {
+        "HostedZoneName" : "getupcloud.com.",
+        "Comment" : "A record created by cloudformation",
+        "Name" : { "Fn::Join" : [ "", [{"Ref" : "AWS::StackName"}, ".getupcloud.com"]]},
+        "Type" : "A",
+        "TTL" : "300",
+        "ResourceRecords" : [ { 
+          "Ref" : "IPAddress"
+        } ]
+      } 
+    },
+   "IPAddress" : {
+      "Type" : "AWS::EC2::EIP",
+      "Properties" : {
+        "Domain" : "vpc",
+        "InstanceId" : { "Ref" : "Instance" }
+      }
     },
     
    "Instance": {  
@@ -140,15 +168,19 @@
           }
         },
         "Puppet" : {
-          "roles"    :  "broker"
+          "roles"    :  "broker",
+          "hostname" : [ { "Ref" : "AWS::StackName"}]
         }
       },
       "Properties": {
         "ImageId" : { "Ref" : "AmiId" },
         "SecurityGroupIds" : [{ "Ref" : "SecurityGroupId" }],
-        "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "private", { "Ref" : "PrivateNetId" } ] },
+        "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "public", { "Ref" : "PublicNetId" } ] },
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType": { "Ref": "InstanceType" },
+        "Tags": [ { "Key" : "Name", "Value": { "Ref": "AWS::StackName" } } ],
+        "Monitoring" : "true",
+        "IamInstanceProfile" : { "Ref": "InstanceProfile" },
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
@@ -185,7 +217,7 @@
     },
 
     "OPSDNS" : {
-      "Value" : {"Ref" : "OpsDNSRecord" },
+      "Value" : {"Ref" : "DNSRecord" },
       "Description" : "Instance internal dns name"
     },
 

@@ -75,7 +75,16 @@
         "UserName" : { "Ref": "CFNInitUser" }
       }
     },
-
+    
+    "InstanceProfile": {
+        "Type": "AWS::IAM::InstanceProfile",
+         "Properties": {
+            "Path": "/",
+            "Roles": [
+                 "cloudwatch"
+            ]
+        }
+    },
     "OpsDNSRecordSS1": {
       "Type" : "AWS::Route53::RecordSet",
       "Properties" : {
@@ -181,6 +190,9 @@
         "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "private", "privid1" ] },
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType": { "Ref": "InstanceType" },
+        "Tags": [ { "Key" : "Name", "Value": "ss1" } ],
+        "Monitoring" : "true",
+         "IamInstanceProfile" : { "Ref": "InstanceProfile" },
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "yum update -y aws-cfn-bootstrap\n",
@@ -259,6 +271,9 @@
         "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "private", "privid2" ] },
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType": { "Ref": "InstanceType" },
+        "Tags": [ { "Key" : "Name", "Value": "ss2" } ],
+        "Monitoring" : "true",
+         "IamInstanceProfile" : { "Ref": "InstanceProfile" },
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "yum update -y aws-cfn-bootstrap\n",
@@ -286,6 +301,7 @@
     "NewVolume" : {
       "Type" : "AWS::EC2::Volume",
       "Properties" : {
+        "Tags": [ { "Key" : "Name", "Value": "NewVolume" } ],
         "Size" : "5",
         "AvailabilityZone" : { "Fn::GetAtt" : [ "Instance2", "AvailabilityZone" ]}
       }
@@ -355,6 +371,9 @@
         "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "private", "privid3" ] },
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType": { "Ref": "InstanceType" },
+        "Monitoring" : "true",
+         "IamInstanceProfile" : { "Ref": "InstanceProfile" },
+         "Tags": [ { "Key" : "Name", "Value": "ss3" } ],
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "yum update -y aws-cfn-bootstrap\n",

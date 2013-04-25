@@ -32,16 +32,9 @@
 
     "AmiId" : {
       "Type" : "String",
-      "Default" : "ami-eeee64de",
+      "Default" : "ami-e672e7d6",
       "Description" : "AMI utilizado para a instancia"
     },
-    "NodeProfile" : {
-      "Type" : "String",
-      "AllowedValues": [ "production", "development" ],
-      "Description" : "Profile utilizado para o no, production | development",
-      "ConstraintDescription" : "Must be production or development"
-    },
-
     "InstanceType" : {
       "Description" : "Tamanho da instancia",
       "Type" : "String",
@@ -87,6 +80,16 @@
       }
     },
 
+    "InstanceProfile": {
+        "Type": "AWS::IAM::InstanceProfile",
+         "Properties": {
+            "Path": "/",
+            "Roles": [
+                 "cloudwatch"
+            ]
+        }
+    },
+
     "OpsDNSRecord": {
       "Type" : "AWS::Route53::RecordSet",
       "Properties" : {
@@ -120,7 +123,8 @@
     "NewVolume" : {
       "Type" : "AWS::EC2::Volume",
       "Properties" : {
-        "Size" : "5",
+        "Size" : "100",
+        "Tags": [ { "Key" : "Name", "Value": "NewVolume" } ],
         "AvailabilityZone" : { "Fn::GetAtt" : [ "Instance", "AvailabilityZone" ]}
       }
     },    
@@ -131,7 +135,6 @@
           "config" : {
             "packages" : {
               "yum" : {
-                "puppet"     : [],
                 "ruby-devel" : [],
                 "gcc"        : [],
                 "make"       : [],
@@ -150,6 +153,7 @@
                   "   ssldir=$vardir/ssl\n",
                   "   pluginsync=true\n",
                   "[agent]\n",
+                  "   report=true\n",
                   "   classfile=$vardir/classes.txt\n",
                   "   localconfig=$vardir/localconfig\n",
                   "   server=",{ "Ref" : "PuppetHostname" },"\n"
@@ -177,7 +181,6 @@
         },
         "Puppet" : {
           "roles"    : [ "node" ],
-          "node_profile" : [ { "Ref" : "NodeProfile"} ],
           "hostname" : [ { "Ref" : "AWS::StackName"}]
         }
       },
@@ -187,10 +190,12 @@
         "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "public", { "Ref" : "PublicNetId" } ] },
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType": { "Ref": "InstanceType" },
+        "Tags": [ { "Key" : "Name", "Value": { "Ref": "AWS::StackName" } } ],
+        "Monitoring" : "true",
+        "IamInstanceProfile" : { "Ref": "InstanceProfile" },
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
-          "yum install -y http://epel.gtdinternet.com/6/i386/epel-release-6-8.noarch.rpm\n",
           "while [ ! -e /dev/xvdo ]; do echo Waiting for EBS volume to attach; sleep 5; done\n",
           "/bin/hostname ", { "Ref" : "AWS::StackName" }, "\n",
 
