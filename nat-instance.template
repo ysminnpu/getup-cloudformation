@@ -1,0 +1,139 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "getup nat instance, informar: SubnetId",
+
+  "Parameters" : {
+
+    "KeyName" : {
+      "Description" : "Chave SSH publica para admin",
+      "Default" : "getup",
+      "Type" : "String"
+    },
+
+    "VpcId" : {
+      "Type" : "String",
+      "Default" : "vpc-8c4b07e5",
+      "Description" : "Id do VPC"
+    },
+
+    "AlarmTopic": {
+      "Description": "sns topic para envio de notificacoes",
+      "Default": "arn:aws:sns:us-west-2:048671028587:Getup",
+      "Type": "String"
+    }, 
+
+    "PublicNetId" : {
+      "Type" : "String",
+      "AllowedValues" : [ "1","2","3"],
+      "ConstraintDescription" : "must be values between 1 and 3",
+      "Description" : "Indice da rede [ 1-3 ]"
+    },
+
+    "AmiId" : {
+      "Type" : "String",
+      "Default" : "ami-8d57c6bd",
+      "Description" : "AMI utilizado para a instancia"
+    },
+    
+    "InstanceType" : {
+      "Description" : "Tamanho da instancia",
+      "Type" : "String",
+      "Default" : "t1.micro",
+      "AllowedValues" : [ "t1.micro","m1.small","m1.medium","m1.large","m1.xlarge","m2.xlarge","m2.2xlarge","m2.4xlarge","c1.medium","c1.xlarge","cc1.4xlarge","cc2.8xlarge","cg1.4xlarge"],
+      "ConstraintDescription" : "must be a valid EC2 instance type."
+    },
+
+    "SecurityGroupId": {
+      "Type" : "String",
+      "Default" : "sg-e6130f8a",
+      "Description" : "SecurityGroup"
+    }
+
+  },
+  "Mappings" : {
+    "NetworksMap" : {
+      "public" :  { "1" : "subnet-974b07fe", "2" : "subnet-60440809", "3" : "subnet-6544080c" }
+    }
+  },
+
+  "Resources": {
+
+    "CFNInitUser" : {
+      "Type" : "AWS::IAM::User",
+      "Properties" : {
+        "Policies": [{
+          "PolicyName": "AccessForCFNInit",
+          "PolicyDocument" : {
+            "Statement": [{
+              "Effect"   : "Allow",
+              "Action"   : "cloudformation:DescribeStackResource",
+              "Resource" : "*"
+            }]
+          }
+        }]
+      }
+    },
+    
+    "CFNKeys" : {
+      "Type" : "AWS::IAM::AccessKey",
+      "Properties" : {
+        "UserName" : { "Ref": "CFNInitUser" }
+      }
+    },
+
+    "DNSRecord": {
+      "Type" : "AWS::Route53::RecordSet",
+      "Properties" : {
+        "HostedZoneName" : "ops.getupcloud.com.",
+        "Comment" : "A record created by cloudformation",
+        "Name" : "ops.getupcloud.com",
+        "Type" : "A",
+        "TTL" : "300",
+        "ResourceRecords" : [ {
+          "Ref" : "IPAddress"
+        }]
+      } 
+    },
+
+   "IPAddress" : {
+      "Type" : "AWS::EC2::EIP",
+      "Properties" : {
+        "Domain" : "vpc",
+        "InstanceId" : { "Ref" : "Instance" }
+      }
+    },
+    
+   "Instance": {  
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId" : { "Ref" : "AmiId" },
+        "SecurityGroupIds" : [{ "Ref" : "SecurityGroupId" }],
+        "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "public", { "Ref" : "PublicNetId" } ] },
+        "KeyName" : { "Ref" : "KeyName" },
+        "InstanceType": { "Ref": "InstanceType" },
+        "Tags": [ { "Key" : "Name", "Value": { "Ref": "AWS::StackName" } } ],
+        "SourceDestCheck": "false",
+        "Monitoring" : "true"
+      }
+    }
+  },
+    
+
+  "Outputs" : {
+    "InstanceId" : {
+      "Value" : { "Ref" : "Instance" },
+      "Description" : "Instance Id of newly created instance"
+    },
+
+    "DNS" : {
+      "Value" : {"Ref" : "DNSRecord" },
+      "Description" : "Instance internal dns name"
+    },
+
+    "SecurityGroupId" : {
+      "Value" : { "Ref" : "SecurityGroupId" },
+      "Description" : "Security Group of instance"
+    }
+  }
+}

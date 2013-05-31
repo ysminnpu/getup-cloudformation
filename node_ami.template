@@ -1,7 +1,7 @@
 {
   "AWSTemplateFormatVersion" : "2010-09-09",
 
-  "Description" : "getup openshift broker, informar: SubnetId, MysqlHost, MysqlUser, Mysqlpasswd, MysqlDB ",
+  "Description" : "getup openshift node, informar: SubnetId, Hostname",
 
   "Parameters" : {
 
@@ -9,13 +9,6 @@
       "Description" : "Chave SSH publica para admin",
       "Default" : "getup",
       "Type" : "String"
-    },
-    "Development" : {
-      "Description" : "Enable development mode",
-      "Default" : "false",
-      "Type" : "String",
-      "AllowedValues" : ["true", "false"],
-      "ConstraintDescription" : "Value must be true or false"
     },
     
     "PuppetHostname": {
@@ -29,19 +22,27 @@
       "Default" : "vpc-8c4b07e5",
       "Description" : "Id do VPC"
     },
+
     "PublicNetId" : {
       "Type" : "String",
       "AllowedValues" : [ "1","2","3"],
       "ConstraintDescription" : "must be values between 1 and 3",
       "Description" : "Indice da rede [ 1-3 ]"
     },
+
     "AmiId" : {
       "Type" : "String",
-      "Default" : "ami-e672e7d6",
+      "Default" : "ami-8e27adbe",
       "Description" : "AMI utilizado para a instancia"
     },
-    
-"InstanceType" : {
+    "NodeProfile" : {
+      "Type" : "String",
+      "AllowedValues": [ "production", "development" ],
+      "Description" : "Profile utilizado para o no, production | development",
+      "ConstraintDescription" : "Must be production or development"
+    },
+
+    "InstanceType" : {
       "Description" : "Tamanho da instancia",
       "Type" : "String",
       "Default" : "t1.micro",
@@ -51,7 +52,7 @@
 
     "SecurityGroupId": {
       "Type" : "String",
-      "Default" : "sg-af9884c3",
+      "Default" : "sg-fe130f92",
       "Description" : "SecurityGroup"
     }
 
@@ -94,34 +95,36 @@
         "Name" : { "Fn::Join" : [ "", [{"Ref" : "AWS::StackName"}, ".ops.getupcloud.com"]]},
         "Type" : "A",
         "TTL" : "300",
-        "ResourceRecords" : [ {
-          "Fn::GetAtt" : [ "Instance","PrivateIp" ] 
-        }]
+        "ResourceRecords" : [ 
+          { "Ref" : "IPAddress" } 
+        ]
       } 
     },
-
-    "DNSRecord": {
-      "Type" : "AWS::Route53::RecordSet",
-      "Properties" : {
-        "HostedZoneName" : "getupcloud.com.",
-        "Comment" : "A record created by cloudformation",
-        "Name" : { "Fn::Join" : [ "", [{"Ref" : "AWS::StackName"}, ".getupcloud.com"]]},
-        "Type" : "A",
-        "TTL" : "300",
-        "ResourceRecords" : [ { 
-          "Ref" : "IPAddress"
-        } ]
-      } 
-    },
-   "IPAddress" : {
+    
+    "IPAddress" : {
       "Type" : "AWS::EC2::EIP",
       "Properties" : {
         "Domain" : "vpc",
         "InstanceId" : { "Ref" : "Instance" }
       }
     },
-    
-   "Instance": {  
+    "MountPoint" : {
+      "Type" : "AWS::EC2::VolumeAttachment",
+      "Properties" : {
+        "InstanceId" : { "Ref" : "Instance" },
+        "VolumeId"  : { "Ref" : "NewVolume" },
+        "Device" : "/dev/xvdo"
+      }
+    },
+
+    "NewVolume" : {
+      "Type" : "AWS::EC2::Volume",
+      "Properties" : {
+        "Size" : "5",
+        "AvailabilityZone" : { "Fn::GetAtt" : [ "Instance", "AvailabilityZone" ]}
+      }
+    },    
+    "Instance": {  
       "Type": "AWS::EC2::Instance",
       "Metadata" : {
         "AWS::CloudFormation::Init" : {
@@ -139,6 +142,12 @@
               }
             },
             "files" : {
+            "/etc/yum.repos.d/epel.repo" : {
+                "source" : "https://s3.amazonaws.com/cloudformation-examples/enable-epel-on-amazon-linux-ami",
+                "mode"   : "000644",
+                "owner"  : "root",
+                "group"  : "root"
+              },
               "/etc/puppet/puppet.conf" : {
                 "content" : { "Fn::Join" : ["", [
                   "[main]\n",
@@ -147,7 +156,6 @@
                   "   ssldir=$vardir/ssl\n",
                   "   pluginsync=true\n",
                   "[agent]\n",
-                  "   runinterval=21600\n",
                   "   classfile=$vardir/classes.txt\n",
                   "   localconfig=$vardir/localconfig\n",
                   "   server=",{ "Ref" : "PuppetHostname" },"\n"
@@ -155,12 +163,6 @@
                 "mode" : "000644",
                 "owner" : "root",
                 "group" : "root"
-              },
-              "/usr/lib/ruby/site_ruby/1.8/facter/ec2.rb" : {
-              "source" : "https://s3-us-west-2.amazonaws.com/ec2facter/ec2.rb",
-              "mode" : "000644",
-              "owner" : "root",
-              "group" : "root"
               }
             },
             "services" : {
@@ -174,8 +176,8 @@
           }
         },
         "Puppet" : {
-          "roles"    :  "broker",
-          "development_mode" : [ { "Ref" : "Development"}],
+          "roles"    : [ "node" ],
+          "node_profile" : [ { "Ref" : "NodeProfile"} ],
           "hostname" : [ { "Ref" : "AWS::StackName"}]
         }
       },
@@ -185,23 +187,21 @@
         "SubnetId" : { "Fn::FindInMap" : [ "NetworksMap", "public", { "Ref" : "PublicNetId" } ] },
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType": { "Ref": "InstanceType" },
-        "Tags": [ { "Key" : "Name", "Value": { "Ref": "AWS::StackName" } } ],
-        "Monitoring" : "true",
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
-          "easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
-          "yum install -y http://epel.gtdinternet.com/6/i386/epel-release-6-8.noarch.rpm\n",
+          "yum update -y aws-cfn-bootstrap\n",
+          "while [ ! -e /dev/xvdo ]; do echo Waiting for EBS volume to attach; sleep 5; done\n",
           "/bin/hostname ", { "Ref" : "AWS::StackName" }, "\n",
 
-          "cfn-init --region ", { "Ref" : "AWS::Region" },
+          "/opt/aws/bin/cfn-init --region ", { "Ref" : "AWS::Region" },
           "    -s ", { "Ref" : "AWS::StackName" }, " -r Instance ",
           "    --access-key ", { "Ref" : "CFNKeys" },
           "    --secret-key ", { "Fn::GetAtt" : ["CFNKeys", "SecretAccessKey"]}, "\n",
-          "cfn-signal -e $? '", { "Ref" : "ApplicationWaitHandle" }, "'\n"
+          "/opt/aws/bin/cfn-signal -e $? '", { "Ref" : "ApplicationWaitHandle" }, "'\n"
         ]]}}
       }
     },
-    
+   
     "ApplicationWaitHandle" : {
       "Type" : "AWS::CloudFormation::WaitConditionHandle"
     },
@@ -223,7 +223,7 @@
     },
 
     "OPSDNS" : {
-      "Value" : {"Ref" : "DNSRecord" },
+      "Value" : {"Ref" : "OpsDNSRecord" },
       "Description" : "Instance internal dns name"
     },
 
@@ -232,5 +232,4 @@
       "Description" : "Security Group of instance"
     }
   }
-
 }

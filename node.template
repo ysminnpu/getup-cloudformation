@@ -10,6 +10,13 @@
       "Default" : "getup",
       "Type" : "String"
     },
+    "Development" : {
+      "Description" : "Enable development mode",
+      "Default" : "false",
+      "Type" : "String",
+      "AllowedValues" : ["true", "false"],
+      "ConstraintDescription" : "Value must be true or false"
+    },
     
     "PuppetHostname": {
       "Description" : "PuppetMaster hostname",
@@ -80,16 +87,6 @@
       }
     },
 
-    "InstanceProfile": {
-        "Type": "AWS::IAM::InstanceProfile",
-         "Properties": {
-            "Path": "/",
-            "Roles": [
-                 "cloudwatch"
-            ]
-        }
-    },
-
     "OpsDNSRecord": {
       "Type" : "AWS::Route53::RecordSet",
       "Properties" : {
@@ -153,7 +150,7 @@
                   "   ssldir=$vardir/ssl\n",
                   "   pluginsync=true\n",
                   "[agent]\n",
-                  "   report=true\n",
+                  "   runinterval=21600\n",
                   "   classfile=$vardir/classes.txt\n",
                   "   localconfig=$vardir/localconfig\n",
                   "   server=",{ "Ref" : "PuppetHostname" },"\n"
@@ -181,6 +178,7 @@
         },
         "Puppet" : {
           "roles"    : [ "node" ],
+          "development_mode" : [ { "Ref" : "Development"}],
           "hostname" : [ { "Ref" : "AWS::StackName"}]
         }
       },
@@ -192,7 +190,6 @@
         "InstanceType": { "Ref": "InstanceType" },
         "Tags": [ { "Key" : "Name", "Value": { "Ref": "AWS::StackName" } } ],
         "Monitoring" : "true",
-        "IamInstanceProfile" : { "Ref": "InstanceProfile" },
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",

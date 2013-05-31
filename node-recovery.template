@@ -1,7 +1,7 @@
 {
   "AWSTemplateFormatVersion" : "2010-09-09",
 
-  "Description" : "getup openshift broker, informar: SubnetId, MysqlHost, MysqlUser, Mysqlpasswd, MysqlDB ",
+  "Description" : "getup openshift node, informar: SubnetId, Hostname",
 
   "Parameters" : {
 
@@ -24,24 +24,35 @@
       "Type": "String"
     },
 
+    "IP" : {
+      "Description" : "Elastic IP for instance",
+      "Type": "String"
+    },
+
+    "VOLUME" : {
+      "Description" : "EBS Volume for instance",
+      "Type" : "String"
+    },
+
     "VpcId" : {
       "Type" : "String",
       "Default" : "vpc-8c4b07e5",
       "Description" : "Id do VPC"
     },
+
     "PublicNetId" : {
       "Type" : "String",
       "AllowedValues" : [ "1","2","3"],
       "ConstraintDescription" : "must be values between 1 and 3",
       "Description" : "Indice da rede [ 1-3 ]"
     },
+
     "AmiId" : {
       "Type" : "String",
       "Default" : "ami-e672e7d6",
       "Description" : "AMI utilizado para a instancia"
     },
-    
-"InstanceType" : {
+    "InstanceType" : {
       "Description" : "Tamanho da instancia",
       "Type" : "String",
       "Default" : "t1.micro",
@@ -51,7 +62,7 @@
 
     "SecurityGroupId": {
       "Type" : "String",
-      "Default" : "sg-af9884c3",
+      "Default" : "sg-fe130f92",
       "Description" : "SecurityGroup"
     }
 
@@ -86,6 +97,16 @@
       }
     },
 
+    "InstanceProfile": {
+        "Type": "AWS::IAM::InstanceProfile",
+         "Properties": {
+            "Path": "/",
+            "Roles": [
+                 "cloudwatch"
+            ]
+        }
+    },
+
     "OpsDNSRecord": {
       "Type" : "AWS::Route53::RecordSet",
       "Properties" : {
@@ -94,41 +115,35 @@
         "Name" : { "Fn::Join" : [ "", [{"Ref" : "AWS::StackName"}, ".ops.getupcloud.com"]]},
         "Type" : "A",
         "TTL" : "300",
-        "ResourceRecords" : [ {
-          "Fn::GetAtt" : [ "Instance","PrivateIp" ] 
-        }]
+        "ResourceRecords" : [ 
+          { "Ref" : "IPAddress" } 
+        ]
       } 
     },
-
-    "DNSRecord": {
-      "Type" : "AWS::Route53::RecordSet",
+    
+    "IPAddress" : {
+      "Type" : "AWS::EC2::EIPAssociation",
       "Properties" : {
-        "HostedZoneName" : "getupcloud.com.",
-        "Comment" : "A record created by cloudformation",
-        "Name" : { "Fn::Join" : [ "", [{"Ref" : "AWS::StackName"}, ".getupcloud.com"]]},
-        "Type" : "A",
-        "TTL" : "300",
-        "ResourceRecords" : [ { 
-          "Ref" : "IPAddress"
-        } ]
-      } 
-    },
-   "IPAddress" : {
-      "Type" : "AWS::EC2::EIP",
-      "Properties" : {
-        "Domain" : "vpc",
+        "EIP" : { "Ref" :"IP",
         "InstanceId" : { "Ref" : "Instance" }
       }
     },
-    
-   "Instance": {  
+    "MountPoint" : {
+      "Type" : "AWS::EC2::VolumeAttachment",
+      "Properties" : {
+        "InstanceId" : { "Ref" : "Instance" },
+        "VolumeId"  : { "Ref" : "VOLUME" },
+        "Device" : "/dev/xvdo"
+      }
+    },
+   
+    "Instance": {  
       "Type": "AWS::EC2::Instance",
       "Metadata" : {
         "AWS::CloudFormation::Init" : {
           "config" : {
             "packages" : {
               "yum" : {
-                "puppet"     : [],
                 "ruby-devel" : [],
                 "gcc"        : [],
                 "make"       : [],
@@ -174,7 +189,7 @@
           }
         },
         "Puppet" : {
-          "roles"    :  "broker",
+          "roles"    : [ "node" ],
           "development_mode" : [ { "Ref" : "Development"}],
           "hostname" : [ { "Ref" : "AWS::StackName"}]
         }
@@ -187,10 +202,11 @@
         "InstanceType": { "Ref": "InstanceType" },
         "Tags": [ { "Key" : "Name", "Value": { "Ref": "AWS::StackName" } } ],
         "Monitoring" : "true",
+        "IamInstanceProfile" : { "Ref": "InstanceProfile" },
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
-          "yum install -y http://epel.gtdinternet.com/6/i386/epel-release-6-8.noarch.rpm\n",
+          "while [ ! -e /dev/xvdo ]; do echo Waiting for EBS volume to attach; sleep 5; done\n",
           "/bin/hostname ", { "Ref" : "AWS::StackName" }, "\n",
 
           "cfn-init --region ", { "Ref" : "AWS::Region" },
@@ -201,7 +217,7 @@
         ]]}}
       }
     },
-    
+   
     "ApplicationWaitHandle" : {
       "Type" : "AWS::CloudFormation::WaitConditionHandle"
     },
@@ -223,7 +239,7 @@
     },
 
     "OPSDNS" : {
-      "Value" : {"Ref" : "DNSRecord" },
+      "Value" : {"Ref" : "OpsDNSRecord" },
       "Description" : "Instance internal dns name"
     },
 
@@ -232,5 +248,4 @@
       "Description" : "Security Group of instance"
     }
   }
-
 }
