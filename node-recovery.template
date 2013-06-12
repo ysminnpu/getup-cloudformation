@@ -10,28 +10,10 @@
       "Default" : "getup",
       "Type" : "String"
     },
-    "Development" : {
-      "Description" : "Enable development mode",
-      "Default" : "false",
-      "Type" : "String",
-      "AllowedValues" : ["true", "false"],
-      "ConstraintDescription" : "Value must be true or false"
-    },
-    
     "PuppetHostname": {
       "Description" : "PuppetMaster hostname",
       "Default" : "puppetmaster.ops.getupcloud.com",
       "Type": "String"
-    },
-
-    "IP" : {
-      "Description" : "Elastic IP for instance",
-      "Type": "String"
-    },
-
-    "VOLUME" : {
-      "Description" : "EBS Volume for instance",
-      "Type" : "String"
     },
 
     "VpcId" : {
@@ -39,7 +21,6 @@
       "Default" : "vpc-8c4b07e5",
       "Description" : "Id do VPC"
     },
-
     "PublicNetId" : {
       "Type" : "String",
       "AllowedValues" : [ "1","2","3"],
@@ -49,9 +30,19 @@
 
     "AmiId" : {
       "Type" : "String",
-      "Default" : "ami-e672e7d6",
-      "Description" : "AMI utilizado para a instancia"
+      "Description" : "AMI gerado pelo utimo snapshot"
     },
+
+    "VolumeId" : {
+      "Type" : "String",
+      "Description": "EBS a ser plugado"
+    },
+
+    "EIPAllocationId" : {
+      "Type" : "String",
+      "Description": "AllocationId do Elastic IP"
+    },
+
     "InstanceType" : {
       "Description" : "Tamanho da instancia",
       "Type" : "String",
@@ -74,57 +65,10 @@
   },
   "Resources": {
 
-    "CFNInitUser" : {
-      "Type" : "AWS::IAM::User",
-      "Properties" : {
-        "Policies": [{
-          "PolicyName": "AccessForCFNInit",
-          "PolicyDocument" : {
-            "Statement": [{
-              "Effect"   : "Allow",
-              "Action"   : "cloudformation:DescribeStackResource",
-              "Resource" : "*"
-            }]
-          }
-        }]
-      }
-    },
-    
-    "CFNKeys" : {
-      "Type" : "AWS::IAM::AccessKey",
-      "Properties" : {
-        "UserName" : { "Ref": "CFNInitUser" }
-      }
-    },
-
-    "InstanceProfile": {
-        "Type": "AWS::IAM::InstanceProfile",
-         "Properties": {
-            "Path": "/",
-            "Roles": [
-                 "cloudwatch"
-            ]
-        }
-    },
-
-    "OpsDNSRecord": {
-      "Type" : "AWS::Route53::RecordSet",
-      "Properties" : {
-        "HostedZoneName" : "ops.getupcloud.com.",
-        "Comment" : "A record created by cloudformation",
-        "Name" : { "Fn::Join" : [ "", [{"Ref" : "AWS::StackName"}, ".ops.getupcloud.com"]]},
-        "Type" : "A",
-        "TTL" : "300",
-        "ResourceRecords" : [ 
-          { "Ref" : "IPAddress" } 
-        ]
-      } 
-    },
-    
-    "IPAddress" : {
+   "IPAddress" : {
       "Type" : "AWS::EC2::EIPAssociation",
       "Properties" : {
-        "EIP" : { "Ref" :"IP",
+        "AllocationId": { "Ref" : "EIPAllocationId" },
         "InstanceId" : { "Ref" : "Instance" }
       }
     },
@@ -132,68 +76,13 @@
       "Type" : "AWS::EC2::VolumeAttachment",
       "Properties" : {
         "InstanceId" : { "Ref" : "Instance" },
-        "VolumeId"  : { "Ref" : "VOLUME" },
+        "VolumeId"  : { "Ref" : "VolumeId" },
         "Device" : "/dev/xvdo"
       }
     },
    
     "Instance": {  
       "Type": "AWS::EC2::Instance",
-      "Metadata" : {
-        "AWS::CloudFormation::Init" : {
-          "config" : {
-            "packages" : {
-              "yum" : {
-                "ruby-devel" : [],
-                "gcc"        : [],
-                "make"       : [],
-                "rubygems"   : []
-              },
-              "rubygems" : {
-                "json"       : []
-              }
-            },
-            "files" : {
-              "/etc/puppet/puppet.conf" : {
-                "content" : { "Fn::Join" : ["", [
-                  "[main]\n",
-                  "   logdir=/var/log/puppet\n",
-                  "   rundir=/var/run/puppet\n",
-                  "   ssldir=$vardir/ssl\n",
-                  "   pluginsync=true\n",
-                  "[agent]\n",
-                  "   runinterval=21600\n",
-                  "   classfile=$vardir/classes.txt\n",
-                  "   localconfig=$vardir/localconfig\n",
-                  "   server=",{ "Ref" : "PuppetHostname" },"\n"
-                ]] },
-                "mode" : "000644",
-                "owner" : "root",
-                "group" : "root"
-              },
-              "/usr/lib/ruby/site_ruby/1.8/facter/ec2.rb" : {
-              "source" : "https://s3-us-west-2.amazonaws.com/ec2facter/ec2.rb",
-              "mode" : "000644",
-              "owner" : "root",
-              "group" : "root"
-              }
-            },
-            "services" : {
-              "sysvinit" : {  
-                "puppet" : {
-                  "enabled" : "true",
-                  "ensureRunning" : "true"                
-                }
-              }
-            }
-          }
-        },
-        "Puppet" : {
-          "roles"    : [ "node" ],
-          "development_mode" : [ { "Ref" : "Development"}],
-          "hostname" : [ { "Ref" : "AWS::StackName"}]
-        }
-      },
       "Properties": {
         "ImageId" : { "Ref" : "AmiId" },
         "SecurityGroupIds" : [{ "Ref" : "SecurityGroupId" }],
@@ -202,47 +91,20 @@
         "InstanceType": { "Ref": "InstanceType" },
         "Tags": [ { "Key" : "Name", "Value": { "Ref": "AWS::StackName" } } ],
         "Monitoring" : "true",
-        "IamInstanceProfile" : { "Ref": "InstanceProfile" },
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "easy_install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
           "while [ ! -e /dev/xvdo ]; do echo Waiting for EBS volume to attach; sleep 5; done\n",
-          "/bin/hostname ", { "Ref" : "AWS::StackName" }, "\n",
-
-          "cfn-init --region ", { "Ref" : "AWS::Region" },
-          "    -s ", { "Ref" : "AWS::StackName" }, " -r Instance ",
-          "    --access-key ", { "Ref" : "CFNKeys" },
-          "    --secret-key ", { "Fn::GetAtt" : ["CFNKeys", "SecretAccessKey"]}, "\n",
-          "cfn-signal -e $? '", { "Ref" : "ApplicationWaitHandle" }, "'\n"
+          "rm -Rf /var/tmp/aws-mon\n"
         ]]}}
-      }
-    },
-   
-    "ApplicationWaitHandle" : {
-      "Type" : "AWS::CloudFormation::WaitConditionHandle"
-    },
-
-    "ApplicationWaitCondition" : {
-      "Type" : "AWS::CloudFormation::WaitCondition",
-      "DependsOn"  : "Instance",
-      "Properties" : {
-        "Handle"   : { "Ref" : "ApplicationWaitHandle" },
-        "Timeout"  : "1200"
       }
     }
   },
-
   "Outputs" : {
     "InstanceId" : {
       "Value" : { "Ref" : "Instance" },
       "Description" : "Instance Id of newly created instance"
     },
-
-    "OPSDNS" : {
-      "Value" : {"Ref" : "OpsDNSRecord" },
-      "Description" : "Instance internal dns name"
-    },
-
     "SecurityGroupId" : {
       "Value" : { "Ref" : "SecurityGroupId" },
       "Description" : "Security Group of instance"
