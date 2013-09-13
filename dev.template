@@ -1,7 +1,7 @@
 {
   "AWSTemplateFormatVersion" : "2010-09-09",
 
-  "Description" : "getup openshift node, informar: SubnetId, Hostname",
+  "Description" : "Ambiente Dev",
 
   "Parameters" : {
 
@@ -10,16 +10,16 @@
       "Default" : "getup",
       "Type" : "String"
     },
+    "Environment" : {
+      "Description" : "Environment",
+      "Default" : "",
+      "Type" : "String"
+    },
     
     "PuppetHostname": {
       "Description" : "PuppetMaster hostname",
       "Default" : "puppetmaster.ops.getupcloud.com",
       "Type": "String"
-    },
-    "Environment" : {
-      "Description" : "Environment",
-      "Default" : "prod",
-      "Type" : "String"
     },
 
     "VpcId" : {
@@ -27,30 +27,29 @@
       "Default" : "vpc-8c4b07e5",
       "Description" : "Id do VPC"
     },
-
     "PublicNetId" : {
       "Type" : "String",
       "AllowedValues" : [ "1","2","3"],
       "ConstraintDescription" : "must be values between 1 and 3",
       "Description" : "Indice da rede [ 1-3 ]"
     },
-
     "AmiId" : {
       "Type" : "String",
       "Default" : "ami-505dc160",
       "Description" : "AMI utilizado para a instancia"
     },
-    "InstanceType" : {
+    
+"InstanceType" : {
       "Description" : "Tamanho da instancia",
       "Type" : "String",
-      "Default" : "t1.micro",
+      "Default" : "c1.medium",
       "AllowedValues" : [ "t1.micro","m1.small","m1.medium","m1.large","m1.xlarge","m2.xlarge","m2.2xlarge","m2.4xlarge","c1.medium","c1.xlarge","cc1.4xlarge","cc2.8xlarge","cg1.4xlarge"],
       "ConstraintDescription" : "must be a valid EC2 instance type."
     },
 
     "SecurityGroupId": {
       "Type" : "String",
-      "Default" : "sg-fe130f92",
+      "Default" : "sg-354ca25a",
       "Description" : "SecurityGroup"
     }
 
@@ -93,43 +92,27 @@
         "Name" : { "Fn::Join" : [ "", [{"Ref" : "AWS::StackName"}, ".ops.getupcloud.com"]]},
         "Type" : "A",
         "TTL" : "300",
-        "ResourceRecords" : [ 
-          { "Ref" : "IPAddress" } 
-        ]
+        "ResourceRecords" : [ { 
+          "Ref" : "IPAddress"
+        } ]
       } 
     },
-    
-    "IPAddress" : {
+   "IPAddress" : {
       "Type" : "AWS::EC2::EIP",
       "Properties" : {
         "Domain" : "vpc",
         "InstanceId" : { "Ref" : "Instance" }
       }
     },
-    "MountPoint" : {
-      "Type" : "AWS::EC2::VolumeAttachment",
-      "Properties" : {
-        "InstanceId" : { "Ref" : "Instance" },
-        "VolumeId"  : { "Ref" : "NewVolume" },
-        "Device" : "/dev/xvdo"
-      }
-    },
-
-    "NewVolume" : {
-      "Type" : "AWS::EC2::Volume",
-      "Properties" : {
-        "Size" : "100",
-        "Tags": [ { "Key" : "Name", "Value": "NewVolume" } ],
-        "AvailabilityZone" : { "Fn::GetAtt" : [ "Instance", "AvailabilityZone" ]}
-      }
-    },    
-    "Instance": {  
+    
+   "Instance": {  
       "Type": "AWS::EC2::Instance",
       "Metadata" : {
         "AWS::CloudFormation::Init" : {
           "config" : {
             "packages" : {
               "yum" : {
+                "puppet"     : [],
                 "ruby-devel" : [],
                 "gcc"        : [],
                 "make"       : [],
@@ -176,7 +159,7 @@
           }
         },
         "Puppet" : {
-          "roles"    : [ "node" ],
+          "roles"    :  "devenv",
           "hostname" : [ { "Ref" : "AWS::StackName"}]
         }
       },
@@ -187,22 +170,20 @@
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType": { "Ref": "InstanceType" },
         "Tags": [ { "Key" : "Name", "Value": { "Ref": "AWS::StackName" } } ],
-        "Monitoring" : "true",
         "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
           "#!/bin/bash\n",
           "if [ -d /var/tmp/aws-mon ]; then rm -Rf /var/tmp/aws-mon; fi\n",
-          "while [ ! -e /dev/xvdo ]; do echo Waiting for EBS volume to attach; sleep 5; done\n",
           "/bin/hostname ", { "Ref" : "AWS::StackName" }, "\n",
 
-          "cfn-init --region ", { "Ref" : "AWS::Region" },
+          "/opt/aws/bin/cfn-init --region ", { "Ref" : "AWS::Region" },
           "    -s ", { "Ref" : "AWS::StackName" }, " -r Instance ",
           "    --access-key ", { "Ref" : "CFNKeys" },
           "    --secret-key ", { "Fn::GetAtt" : ["CFNKeys", "SecretAccessKey"]}, "\n",
-          "cfn-signal -e $? '", { "Ref" : "ApplicationWaitHandle" }, "'\n"
+          "/opt/aws/bin/cfn-signal -e $? '", { "Ref" : "ApplicationWaitHandle" }, "'\n"
         ]]}}
       }
     },
-   
+    
     "ApplicationWaitHandle" : {
       "Type" : "AWS::CloudFormation::WaitConditionHandle"
     },
@@ -233,4 +214,5 @@
       "Description" : "Security Group of instance"
     }
   }
+
 }
